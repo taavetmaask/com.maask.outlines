@@ -56,8 +56,10 @@ namespace Maask.Outlines
             var resourceData = frameData.Get<UniversalResourceData>();
             var textureProperties = new RenderTextureDescriptor(Screen.width, Screen.height, RenderTextureFormat.Default, 0);
             
-            TextureHandle source, destination;
-
+            var outlineRender =  UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Objects Texture", false);
+            var blurRender = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Texture", false);
+            var temp = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Temp", false);
+            
             if (resourceData.isActiveTargetBackBuffer)
             {
                 return;
@@ -81,40 +83,34 @@ namespace Maask.Outlines
                 
                 passData.RendererListHandle = renderGraph.CreateRendererList(rendererListParameters);
                 
-                destination = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Objects Texture", false);
-                
                 builder.AllowPassCulling(false);
-                builder.SetRenderAttachment(destination, 0);
+                builder.SetRenderAttachment(outlineRender, 0);
                 builder.UseRendererList(passData.RendererListHandle);
-                builder.SetGlobalTextureAfterPass(destination, OUTLINE_TEXTURE);
+                builder.SetGlobalTextureAfterPass(outlineRender, OUTLINE_TEXTURE);
                 builder.SetRenderFunc((RenderPassData data, RasterGraphContext context) => ExecuteRenderPass(data, context));
             }
             
             using (var builder = renderGraph.AddRasterRenderPass<CopyPassData>(passName, out var passData))
             {
-                source = passData.SourceTexture = destination;
-                destination = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Texture", false);
+                passData.SourceTexture = outlineRender;
                 
                 builder.AllowPassCulling(false);
-                builder.UseTexture(source);
-                builder.SetRenderAttachment(destination, 0);
-                builder.SetGlobalTextureAfterPass(destination, BLUR_TEXTURE);
+                builder.UseTexture(outlineRender);
+                builder.SetRenderAttachment(blurRender, 0);
+                builder.SetGlobalTextureAfterPass(blurRender, BLUR_TEXTURE);
                 builder.SetRenderFunc((CopyPassData data, RasterGraphContext context) => CopyRenderFunc(data, context));
             }
 
-            _blurMaterial.SetFloat(BLUR_HORIZONTAL, _settings.Blur / Screen.width);
-            _blurMaterial.SetFloat(BLUR_VERTICAL, _settings.Blur / Screen.height);
-            
-            var temp = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Temp", false);
+            _blurMaterial.SetFloat(BLUR_HORIZONTAL, _settings.Thickness / Screen.width);
+            _blurMaterial.SetFloat(BLUR_VERTICAL, _settings.Thickness / Screen.height);
             
             {
-                source = destination;
-                RenderGraphUtils.BlitMaterialParameters paraVertical = new(source, temp, _blurMaterial, 0);
+                RenderGraphUtils.BlitMaterialParameters paraVertical = new(blurRender, temp, _blurMaterial, 0);
                 renderGraph.AddBlitPass(paraVertical, "Outline Blur Horizontal Pass");
             }
 
             {
-                RenderGraphUtils.BlitMaterialParameters paraHorizontal = new(temp, destination, _blurMaterial, 1);
+                RenderGraphUtils.BlitMaterialParameters paraHorizontal = new(temp, blurRender, _blurMaterial, 1);
                 renderGraph.AddBlitPass(paraHorizontal, "Outline Blur Vertical Pass");
             }
             
@@ -122,13 +118,9 @@ namespace Maask.Outlines
                 _outlineMaterial.SetFloat(OUTLINE_THICKNESS, _settings.Thickness);
                 _outlineMaterial.SetColor(OUTLINE_COLOR, _settings.Color);
 
-                source = destination;
-                destination = resourceData.activeColorTexture;
+                var blitParams = new RenderGraphUtils.BlitMaterialParameters(blurRender, resourceData.activeColorTexture, _outlineMaterial, 0);
                 
-                if (!source.IsValid() || !destination.IsValid()) return;
-            
-                var blitParams = new RenderGraphUtils.BlitMaterialParameters(source, destination, _outlineMaterial, 0);
-                renderGraph.AddBlitPass(blitParams, "Outline Pass");    
+                renderGraph.AddBlitPass(blitParams, "Outline Final Pass");    
             }
         }
         
