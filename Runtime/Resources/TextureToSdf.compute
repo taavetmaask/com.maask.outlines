@@ -1,0 +1,110 @@
+#pragma kernel init_texture
+#pragma kernel flood_texture
+#pragma kernel sdf_texture
+
+#include "UnityCG.cginc"
+
+#define NEIGHBOUR_COUNT 9
+
+Texture2D source_tex;
+RWTexture2D<uint4> flood_tex;
+Texture2D<uint4> flood_tex_read;
+RWTexture2D<float> sdf_tex;
+
+CBUFFER_START(Often)
+    uint2 resolution;
+CBUFFER_END
+
+CBUFFER_START(Always)
+    int step_size;
+CBUFFER_END
+
+SamplerState linear_clamp;
+
+static const int2 offsets[NEIGHBOUR_COUNT] = {
+    int2(-1, -1), int2(0, -1), int2(1, -1),
+    int2(-1,  0), int2(0,  0), int2(1,  0),
+    int2(-1,  1), int2(0,  1), int2(1,  1),
+};
+
+[numthreads(8, 8, 1)]
+void init_texture(uint2 coord: SV_DispatchThreadID)
+{
+    if (coord.x >= resolution.x || coord.y >= resolution.y) return;
+
+    const float2 uv = (coord + 0.5) / resolution;
+
+    float4 color = source_tex.SampleLevel(linear_clamp, uv, 0);
+
+    const float value = color.r;
+    const bool is_inside_seed = value > 0.5;
+
+    int2 seed = coord + int2(1, 1);
+
+    flood_tex[coord] = is_inside_seed ? uint4(seed, 0, 0) : uint4(0, 0, seed);
+}
+
+groupshared uint2x3 shared_coord_dist[NEIGHBOUR_COUNT];
+
+[numthreads(1, 1, NEIGHBOUR_COUNT)]
+void flood_texture(const uint2 coord: SV_DispatchThreadID, uint3 gt_id: SV_GroupThreadID)
+{
+    const int2 sample_coord = coord + offsets[gt_id.z] * step_size;
+
+    int4 seed = flood_tex[sample_coord];
+    int2 shifted_coord = coord + int2(1, 1);
+    int4 diff = seed - shifted_coord.xyxy;
+    
+    shared_coord_dist[gt_id.z] = int2x3(
+        seed.xy, any(seed.xy) ? dot(diff.xy, diff.xy) : 9999999,
+        seed.zw, any(seed.zw) ? dot(diff.zw, diff.zw) : 9999999
+    );
+
+    GroupMemoryBarrier();
+
+    if (gt_id.z == 0)
+    {
+        uint best_outer_dist = 9999999;
+        uint best_inner_dist = 9999999;
+
+        uint2 best_outer_coord = int2(0, 0);
+        uint2 best_inner_coord = int2(0, 0);
+
+        [unroll]
+        for(int i = 0; i < NEIGHBOUR_COUNT; i++)
+        {
+            uint2x3 data = shared_coord_dist[i];
+
+            if (data._m02 < best_inner_dist){
+                best_inner_dist = data._m02;
+                best_inner_coord = data._m00_m01;
+            }
+            
+            if (data._m12 < best_outer_dist){
+                best_outer_dist = data._m12;
+                best_outer_coord = data._m10_m11;
+            }
+        }
+
+        flood_tex[coord] = uint4(best_inner_coord, best_outer_coord);
+    }
+}
+
+[numthreads(8, 8, 1)]
+void sdf_texture(uint2 coord : SV_DispatchThreadID)
+{
+    if(coord.x >= resolution.x || coord.y >= resolution.y) return;
+
+    int4 closest_coords = flood_tex_read[coord];
+    int2 shifted_coord = coord + int2(1, 1);
+    float4 diff = closest_coords - shifted_coord.xyxy;
+
+    const float outer_dist = any(closest_coords.xy) ? length(diff.xy) : 0;
+    const float inner_dist = any(closest_coords.zw) ? length(diff.zw) : 0;
+    
+    float sd = outer_dist - inner_dist;
+	
+    sd /= max(resolution.x, resolution.y);
+	
+    sdf_tex[coord] = sd;
+}
