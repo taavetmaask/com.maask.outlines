@@ -55,27 +55,28 @@ namespace Maask.Outlines
             
             var resourceData = frameData.Get<UniversalResourceData>();
             var cameraData = frameData.Get<UniversalCameraData>();
+            
             var textureProperties = new RenderTextureDescriptor(Screen.width, Screen.height, RenderTextureFormat.Default, 0);
             
             if (resourceData.isActiveTargetBackBuffer)
             {
-                return;
+                return;  
             }
-            
+
             var outlineRender =  UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Objects Texture", false);
             var blurRender = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Texture", false);
             var temp = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Temp", false);
             
-            if (!outlineRender.IsValid() || !blurRender.IsValid())
+            if (!outlineRender.IsValid())
             {
-                return;
+                return;  
             }
             
             using (var builder = renderGraph.AddRasterRenderPass<RenderPassData>("Draw Outline Objects", out var passData))
             {
                 var renderingData = frameData.Get<UniversalRenderingData>();
                 var lightData = frameData.Get<UniversalLightData>();
-                
+
                 var sortFlags = cameraData.defaultOpaqueSortFlags;
                 var renderQueueRange = RenderQueueRange.opaque;
                 var filterSettings = new FilteringSettings(renderQueueRange, ~0, _settings.LayerMask);
@@ -87,10 +88,9 @@ namespace Maask.Outlines
                 var rendererListParameters = new RendererListParams(renderingData.cullResults, drawSettings, filterSettings);
                 
                 passData.RendererListHandle = renderGraph.CreateRendererList(rendererListParameters);
-                
-                builder.AllowPassCulling(false);
+
+                builder.UseTexture(resourceData.cameraDepthTexture);
                 builder.SetRenderAttachment(outlineRender, 0);
-                builder.SetRenderAttachmentDepth(resourceData.cameraDepth, AccessFlags.Read);
                 builder.UseRendererList(passData.RendererListHandle);
                 builder.SetGlobalTextureAfterPass(outlineRender, OUTLINE_TEXTURE);
                 builder.SetRenderFunc((RenderPassData data, RasterGraphContext context) => ExecuteRenderPass(data, context));
@@ -100,13 +100,12 @@ namespace Maask.Outlines
             {
                 passData.SourceTexture = outlineRender;
                 
-                builder.AllowPassCulling(false);
                 builder.UseTexture(outlineRender);
                 builder.SetRenderAttachment(blurRender, 0);
                 builder.SetGlobalTextureAfterPass(blurRender, BLUR_TEXTURE);
                 builder.SetRenderFunc((CopyPassData data, RasterGraphContext context) => CopyRenderFunc(data, context));
             }
-            
+
             _blurMaterial.SetFloat(BLUR_HORIZONTAL, _settings.Thickness / Screen.width);
             _blurMaterial.SetFloat(BLUR_VERTICAL, _settings.Thickness / Screen.height);
             
@@ -119,14 +118,14 @@ namespace Maask.Outlines
                 var paraHorizontal = new RenderGraphUtils.BlitMaterialParameters(temp, blurRender, _blurMaterial, 1);
                 renderGraph.AddBlitPass(paraHorizontal, "Outline Blur Vertical Pass");
             }
-            
+
             {
                 _outlineMaterial.SetFloat(OUTLINE_THICKNESS, _settings.Thickness);
                 _outlineMaterial.SetColor(OUTLINE_COLOR, _settings.Color);
             
-                var blitParams = new RenderGraphUtils.BlitMaterialParameters(blurRender, resourceData.activeColorTexture, _outlineMaterial, 0);
+                var blitParams = new RenderGraphUtils.BlitMaterialParameters(resourceData.activeColorTexture, resourceData.activeColorTexture, _outlineMaterial, 0);
                 
-                renderGraph.AddBlitPass(blitParams, "Outline Final Pass");    
+                renderGraph.AddBlitPass(blitParams, "Outline Final Pass");
             }
         }
         
@@ -137,6 +136,7 @@ namespace Maask.Outlines
 
         private static void ExecuteRenderPass(RenderPassData data, RasterGraphContext context)
         {
+            // context.cmd.ClearRenderTarget(false, true, Color.clear);
             context.cmd.DrawRendererList(data.RendererListHandle);
         }
 
