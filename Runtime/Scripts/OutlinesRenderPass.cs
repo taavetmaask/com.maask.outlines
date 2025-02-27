@@ -90,7 +90,7 @@ namespace Maask.Outlines
                 
                 builder.AllowPassCulling(false);
                 builder.SetRenderAttachment(outlineRender, 0);
-                builder.SetRenderAttachmentDepth(resourceData.cameraDepth);
+                builder.SetRenderAttachmentDepth(resourceData.cameraDepth, AccessFlags.Read);
                 builder.UseRendererList(passData.RendererListHandle);
                 builder.SetGlobalTextureAfterPass(outlineRender, OUTLINE_TEXTURE);
                 builder.SetRenderFunc((RenderPassData data, RasterGraphContext context) => ExecuteRenderPass(data, context));
