@@ -6,6 +6,7 @@ namespace Maask.Outlines
     public class OutlinesRenderFeature : ScriptableRendererFeature
     {
         [SerializeField] private OutlineSettings _outlineSettings;
+        [SerializeField] private RenderPassEvent _event = RenderPassEvent.BeforeRenderingPostProcessing;
         
         private OutlinesRenderPass _pass;
 
@@ -13,11 +14,11 @@ namespace Maask.Outlines
         {
             _pass = new OutlinesRenderPass(_outlineSettings)
             {
-                renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing
+                renderPassEvent = _event
             };
         }
         
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(bool disposing) 
         {
             _pass.Clear();
         }
