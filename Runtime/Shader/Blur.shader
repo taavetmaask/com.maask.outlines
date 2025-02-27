@@ -4,41 +4,41 @@ Shader "Hidden/Maask/Blur"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
         #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 
-        float _VerticalBlur;
-        float _HorizontalBlur;
+        float vertical_blur;
+        float horizontal_blur;
     
-        float4 BlurVertical (Varyings input) : SV_Target
+        float4 blur_vertical (const Varyings input) : SV_Target
         {
-            const float BLUR_SAMPLES = 64;
-            const float BLUR_SAMPLES_RANGE = BLUR_SAMPLES / 2;
-            
+            const float blur_samples = 64;
+            const float blur_samples_range = blur_samples / 2;
+            const float blur_pixels = vertical_blur * _ScreenParams.y;
+
             float3 color = 0;
-            float blurPixels = _VerticalBlur * _ScreenParams.y;
             
-            for(float i = -BLUR_SAMPLES_RANGE; i <= BLUR_SAMPLES_RANGE; i++)
+            for(float i = -blur_samples_range; i <= blur_samples_range; i++)
             {
-                float2 sampleOffset = float2 (0, (blurPixels / _BlitTexture_TexelSize.w) * (i / BLUR_SAMPLES_RANGE));
-                color += SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, input.texcoord + sampleOffset).rgb;
+                const float2 sample_offset = float2 (0, blur_pixels / _BlitTexture_TexelSize.w * (i / blur_samples_range));
+                color += SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, input.texcoord + sample_offset).rgb;
             }
             
-            return float4(color.rgb / (BLUR_SAMPLES + 1), 1);
+            return float4(color.rgb / (blur_samples + 1), 1);
         }
 
-        float4 BlurHorizontal (Varyings input) : SV_Target
+        float4 blur_horizontal (const Varyings input) : SV_Target
         {
-            const float BLUR_SAMPLES = 64;
-            const float BLUR_SAMPLES_RANGE = BLUR_SAMPLES / 2;
+            const float blur_samples = 64;
+            const float blur_samples_range = blur_samples / 2;
+            const float blur_pixels = horizontal_blur * _ScreenParams.x;
             
-            UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
             float3 color = 0;
-            float blurPixels = _HorizontalBlur * _ScreenParams.x;
-            for(float i = -BLUR_SAMPLES_RANGE; i <= BLUR_SAMPLES_RANGE; i++)
+
+            for(float i = -blur_samples_range; i <= blur_samples_range; i++)
             {
-                float2 sampleOffset =
-                    float2 ((blurPixels / _BlitTexture_TexelSize.z) * (i / BLUR_SAMPLES_RANGE), 0);
-                color += SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, input.texcoord + sampleOffset).rgb;
+                const float2 sample_offset =float2 (blur_pixels / _BlitTexture_TexelSize.z * (i / blur_samples_range), 0);
+                color += SAMPLE_TEXTURE2D(_BlitTexture, sampler_LinearClamp, input.texcoord + sample_offset).rgb;
             }
-            return float4(color / (BLUR_SAMPLES + 1), 1);
+            
+            return float4(color / (blur_samples + 1), 1);
         }
     ENDHLSL
     
@@ -54,7 +54,7 @@ Shader "Hidden/Maask/Blur"
             HLSLPROGRAM
             
             #pragma vertex Vert
-            #pragma fragment BlurVertical
+            #pragma fragment blur_vertical
             
             ENDHLSL
         }
@@ -66,7 +66,7 @@ Shader "Hidden/Maask/Blur"
             HLSLPROGRAM
             
             #pragma vertex Vert
-            #pragma fragment BlurHorizontal
+            #pragma fragment blur_horizontal
             
             ENDHLSL
         }

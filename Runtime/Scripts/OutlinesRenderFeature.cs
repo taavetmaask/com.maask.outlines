@@ -24,7 +24,10 @@ namespace Maask.Outlines
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
-            renderer.EnqueuePass(_pass);
+            if (renderingData.cameraData.cameraType == CameraType.Game)
+            {
+                renderer.EnqueuePass(_pass);   
+            }
         }
     }
 }

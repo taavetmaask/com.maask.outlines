@@ -12,8 +12,8 @@ namespace Maask.Outlines
         private static readonly int OUTLINE_THICKNESS = Shader.PropertyToID("_Thickness");
         private static readonly int OUTLINE_COLOR = Shader.PropertyToID("_Color");
         
-        private static readonly int BLUR_HORIZONTAL = Shader.PropertyToID("_HorizontalBlur");
-        private static readonly int BLUR_VERTICAL = Shader.PropertyToID("_VerticalBlur");
+        private static readonly int BLUR_HORIZONTAL = Shader.PropertyToID("horizontal_blur");
+        private static readonly int BLUR_VERTICAL = Shader.PropertyToID("vertical_blur");
         private static readonly int BLUR_TEXTURE = Shader.PropertyToID("_BlurTex");
         
         private readonly OutlineSettings _settings;
@@ -54,13 +54,19 @@ namespace Maask.Outlines
             }
             
             var resourceData = frameData.Get<UniversalResourceData>();
+            var cameraData = frameData.Get<UniversalCameraData>();
             var textureProperties = new RenderTextureDescriptor(Screen.width, Screen.height, RenderTextureFormat.Default, 0);
+            
+            if (resourceData.isActiveTargetBackBuffer)
+            {
+                return;
+            }
             
             var outlineRender =  UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Objects Texture", false);
             var blurRender = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Texture", false);
             var temp = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Temp", false);
             
-            if (resourceData.isActiveTargetBackBuffer)
+            if (!outlineRender.IsValid() || !blurRender.IsValid() || !temp.IsValid())
             {
                 return;
             }
@@ -68,7 +74,6 @@ namespace Maask.Outlines
             using (var builder = renderGraph.AddRasterRenderPass<RenderPassData>("Draw Outline Objects", out var passData))
             {
                 var renderingData = frameData.Get<UniversalRenderingData>();
-                var cameraData = frameData.Get<UniversalCameraData>();
                 var lightData = frameData.Get<UniversalLightData>();
                 
                 var sortFlags = cameraData.defaultOpaqueSortFlags;
@@ -100,24 +105,24 @@ namespace Maask.Outlines
                 builder.SetGlobalTextureAfterPass(blurRender, BLUR_TEXTURE);
                 builder.SetRenderFunc((CopyPassData data, RasterGraphContext context) => CopyRenderFunc(data, context));
             }
-
+            
             _blurMaterial.SetFloat(BLUR_HORIZONTAL, _settings.Thickness / Screen.width);
             _blurMaterial.SetFloat(BLUR_VERTICAL, _settings.Thickness / Screen.height);
             
             {
-                RenderGraphUtils.BlitMaterialParameters paraVertical = new(blurRender, temp, _blurMaterial, 0);
+                var paraVertical = new RenderGraphUtils.BlitMaterialParameters(blurRender, temp, _blurMaterial, 0);
                 renderGraph.AddBlitPass(paraVertical, "Outline Blur Horizontal Pass");
             }
-
+            
             {
-                RenderGraphUtils.BlitMaterialParameters paraHorizontal = new(temp, blurRender, _blurMaterial, 1);
+                var paraHorizontal = new RenderGraphUtils.BlitMaterialParameters(temp, blurRender, _blurMaterial, 1);
                 renderGraph.AddBlitPass(paraHorizontal, "Outline Blur Vertical Pass");
             }
             
             {
                 _outlineMaterial.SetFloat(OUTLINE_THICKNESS, _settings.Thickness);
                 _outlineMaterial.SetColor(OUTLINE_COLOR, _settings.Color);
-
+            
                 var blitParams = new RenderGraphUtils.BlitMaterialParameters(blurRender, resourceData.activeColorTexture, _outlineMaterial, 0);
                 
                 renderGraph.AddBlitPass(blitParams, "Outline Final Pass");    
