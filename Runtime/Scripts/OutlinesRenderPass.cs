@@ -66,7 +66,7 @@ namespace Maask.Outlines
             var blurRender = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Texture", false);
             var temp = UniversalRenderer.CreateRenderGraphTexture(renderGraph, textureProperties, "Outline Blur Temp", false);
             
-            if (!outlineRender.IsValid() || !blurRender.IsValid() || !temp.IsValid())
+            if (!outlineRender.IsValid() || !blurRender.IsValid())
             {
                 return;
             }
@@ -90,6 +90,7 @@ namespace Maask.Outlines
                 
                 builder.AllowPassCulling(false);
                 builder.SetRenderAttachment(outlineRender, 0);
+                builder.SetRenderAttachmentDepth(resourceData.cameraDepth);
                 builder.UseRendererList(passData.RendererListHandle);
                 builder.SetGlobalTextureAfterPass(outlineRender, OUTLINE_TEXTURE);
                 builder.SetRenderFunc((RenderPassData data, RasterGraphContext context) => ExecuteRenderPass(data, context));
